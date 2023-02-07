@@ -374,6 +374,51 @@ PyObject* get_array(const std::vector<Numeric>& v)
     return varray;
 }
 
+template<typename Numeric>
+PyObject* get_2darray(const Numeric* vp, const size_t& n0, const size_t& n1)
+{
+    npy_intp dims[2];
+    dims[0] = n0;
+    dims[1] = n1;
+    NPY_TYPES type = select_npy_type<Numeric>::type;
+    if (type == NPY_NOTYPE) {
+        size_t arrsize = n0*n1;
+        size_t memsize = arrsize*sizeof(double);
+        double* dp = static_cast<double*>(::malloc(memsize));
+        for (size_t i=0; i<arrsize; ++i)
+            dp[i] = vp[i];
+        PyObject* varray = PyArray_SimpleNewFromData(2, dims, NPY_DOUBLE, dp);
+        PyArray_UpdateFlags(reinterpret_cast<PyArrayObject*>(varray), NPY_ARRAY_OWNDATA);
+        return varray;
+    }
+
+    PyObject* varray = PyArray_SimpleNewFromData(2, dims, type, (void*)(vp));
+    return varray;
+}
+
+template<typename Numeric>
+PyObject* get_3darray(const Numeric* vp, const size_t& n0, const size_t& n1, const size_t& n2)
+{
+    npy_intp dims[3];
+    dims[0] = n0;
+    dims[1] = n1;
+    dims[2] = n2;
+    NPY_TYPES type = select_npy_type<Numeric>::type;
+    if (type == NPY_NOTYPE) {
+        size_t arrsize = n0*n1*n2;
+        size_t memsize = arrsize*sizeof(double);
+        double* dp = static_cast<double*>(::malloc(memsize));
+        for (size_t i=0; i<arrsize; ++i)
+            dp[i] = vp[i];
+        PyObject* varray = PyArray_SimpleNewFromData(3, dims, NPY_DOUBLE, dp);
+        PyArray_UpdateFlags(reinterpret_cast<PyArrayObject*>(varray), NPY_ARRAY_OWNDATA);
+        return varray;
+    }
+
+    PyObject* varray = PyArray_SimpleNewFromData(3, dims, type, (void*)(vp));
+    return varray;
+}
+
 
 template<typename Numeric>
 PyObject* get_2darray(const std::vector<::std::vector<Numeric>>& v)
@@ -1448,6 +1493,40 @@ bool quiver(const std::vector<NumericX>& x, const std::vector<NumericY>& y, cons
     return res;
 }
 
+template<typename NumericX, typename NumericY, typename NumericU, typename NumericW>
+bool quiver(const NumericX* x, const NumericY* y, const NumericU* u, const NumericW* w, const size_t& n0, const size_t& n1, const std::map<std::string, std::string>& keywords = {})
+{
+    detail::_interpreter::get();
+
+    PyObject* xarray = detail::get_2darray(x, n0, n1);
+    PyObject* yarray = detail::get_2darray(y, n0, n1);
+    PyObject* uarray = detail::get_2darray(u, n0, n1);
+    PyObject* warray = detail::get_2darray(w, n0, n1);
+
+    PyObject* plot_args = PyTuple_New(4);
+    PyTuple_SetItem(plot_args, 0, xarray);
+    PyTuple_SetItem(plot_args, 1, yarray);
+    PyTuple_SetItem(plot_args, 2, uarray);
+    PyTuple_SetItem(plot_args, 3, warray);
+
+    // construct keyword args
+    PyObject* kwargs = PyDict_New();
+    for(std::map<std::string, std::string>::const_iterator it = keywords.begin(); it != keywords.end(); ++it)
+    {
+        PyDict_SetItemString(kwargs, it->first.c_str(), PyUnicode_FromString(it->second.c_str()));
+    }
+
+    PyObject* res = PyObject_Call(
+            detail::_interpreter::get().s_python_function_quiver, plot_args, kwargs);
+
+    Py_DECREF(kwargs);
+    Py_DECREF(plot_args);
+    if (res)
+        Py_DECREF(res);
+
+    return res;
+}
+
 template<typename NumericX, typename NumericY, typename NumericZ, typename NumericU, typename NumericW, typename NumericV>
 bool quiver(const std::vector<NumericX>& x, const std::vector<NumericY>& y, const std::vector<NumericZ>& z, const std::vector<NumericU>& u, const std::vector<NumericW>& w, const std::vector<NumericV>& v, const std::map<std::string, std::string>& keywords = {})
 {
@@ -1507,6 +1586,89 @@ bool quiver(const std::vector<NumericX>& x, const std::vector<NumericY>& y, cons
   PyDict_SetItemString(gca_kwargs, "projection", PyString_FromString("3d"));
 
   PyObject *gca = PyObject_GetAttrString(fig, "gca");
+  if (!gca) throw std::runtime_error("No gca");
+  Py_INCREF(gca);
+  PyObject *axis = PyObject_Call(
+      gca, detail::_interpreter::get().s_python_empty_tuple, gca_kwargs);
+
+  if (!axis) throw std::runtime_error("No axis");
+  Py_INCREF(axis);
+  Py_DECREF(gca);
+  Py_DECREF(gca_kwargs);
+  
+  //plot our boys bravely, plot them strongly, plot them with a wink and clap
+  PyObject *plot3 = PyObject_GetAttrString(axis, "quiver");
+  if (!plot3) throw std::runtime_error("No 3D line plot");
+  Py_INCREF(plot3);
+  PyObject* res = PyObject_Call(
+          plot3, plot_args, kwargs);
+  if (!res) throw std::runtime_error("Failed 3D plot");
+  Py_DECREF(plot3);
+  Py_DECREF(axis);
+  Py_DECREF(kwargs);
+  Py_DECREF(plot_args);
+  if (res)
+      Py_DECREF(res);
+
+  return res;
+}
+
+template<typename NumericX, typename NumericY, typename NumericZ, typename NumericU, typename NumericW, typename NumericV>
+bool quiver(const NumericX* x, const NumericY* y, const NumericZ* z, const NumericU* u, const NumericW* w, const NumericV* v, const size_t& n0, const size_t& n1, const size_t& n2, const std::map<std::string, std::string>& keywords = {})
+{
+  //set up 3d axes stuff
+  static PyObject *mpl_toolkitsmod = nullptr, *axis3dmod = nullptr;
+  if (!mpl_toolkitsmod) {
+    detail::_interpreter::get();
+
+    PyObject* mpl_toolkits = PyString_FromString("mpl_toolkits");
+    PyObject* axis3d = PyString_FromString("mpl_toolkits.mplot3d");
+    if (!mpl_toolkits || !axis3d) { throw std::runtime_error("couldnt create string"); }
+
+    mpl_toolkitsmod = PyImport_Import(mpl_toolkits);
+    Py_DECREF(mpl_toolkits);
+    if (!mpl_toolkitsmod) { throw std::runtime_error("Error loading module mpl_toolkits!"); }
+
+    axis3dmod = PyImport_Import(axis3d);
+    Py_DECREF(axis3d);
+    if (!axis3dmod) { throw std::runtime_error("Error loading module mpl_toolkits.mplot3d!"); }
+  }
+
+  //set up parameters
+  detail::_interpreter::get();
+
+  PyObject* xarray = detail::get_3darray(x, n0, n1, n2);
+  PyObject* yarray = detail::get_3darray(y, n0, n1, n2);
+  PyObject* zarray = detail::get_3darray(z, n0, n1, n2);
+  PyObject* uarray = detail::get_3darray(u, n0, n1, n2);
+  PyObject* warray = detail::get_3darray(w, n0, n1, n2);
+  PyObject* varray = detail::get_3darray(v, n0, n1, n2);
+
+  PyObject* plot_args = PyTuple_New(6);
+  PyTuple_SetItem(plot_args, 0, xarray);
+  PyTuple_SetItem(plot_args, 1, yarray);
+  PyTuple_SetItem(plot_args, 2, zarray);
+  PyTuple_SetItem(plot_args, 3, uarray);
+  PyTuple_SetItem(plot_args, 4, warray);
+  PyTuple_SetItem(plot_args, 5, varray);
+
+  // construct keyword args
+  PyObject* kwargs = PyDict_New();
+  for(std::map<std::string, std::string>::const_iterator it = keywords.begin(); it != keywords.end(); ++it)
+  {
+      PyDict_SetItemString(kwargs, it->first.c_str(), PyUnicode_FromString(it->second.c_str()));
+  }
+    
+  //get figure gca to enable 3d projection
+  PyObject *fig =
+      PyObject_CallObject(detail::_interpreter::get().s_python_function_figure,
+                          detail::_interpreter::get().s_python_empty_tuple);
+  if (!fig) throw std::runtime_error("Call to figure() failed.");
+
+  PyObject *gca_kwargs = PyDict_New();
+  PyDict_SetItemString(gca_kwargs, "projection", PyString_FromString("3d"));
+
+  PyObject *gca = PyObject_GetAttrString(fig, "add_subplot");
   if (!gca) throw std::runtime_error("No gca");
   Py_INCREF(gca);
   PyObject *axis = PyObject_Call(
