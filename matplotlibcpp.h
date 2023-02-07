@@ -14,6 +14,7 @@
 #include <cstdint> // <cstdint> requires c++11 support
 #include <functional>
 #include <string> // std::stod
+#include <sstream>
 
 #ifndef WITHOUT_NUMPY
 #  define NPY_NO_DEPRECATED_API NPY_1_7_API_VERSION
@@ -1457,6 +1458,14 @@ bool contour(const std::vector<NumericX>& x, const std::vector<NumericY>& y,
     return res;
 }
 
+bool isFloat(std::string s) {
+    std::istringstream iss(s);
+    float f;
+    iss >> std::noskipws >> f; // noskipws considers leading whitespace invalid
+    // Check the entire string was consumed and if either failbit or badbit is set
+    return iss.eof() && !iss.fail(); 
+}
+
 template<typename NumericX, typename NumericY, typename NumericU, typename NumericW>
 bool quiver(const std::vector<NumericX>& x, const std::vector<NumericY>& y, const std::vector<NumericU>& u, const std::vector<NumericW>& w, const std::map<std::string, std::string>& keywords = {})
 {
@@ -1513,7 +1522,12 @@ bool quiver(const NumericX* x, const NumericY* y, const NumericU* u, const Numer
     PyObject* kwargs = PyDict_New();
     for(std::map<std::string, std::string>::const_iterator it = keywords.begin(); it != keywords.end(); ++it)
     {
-        PyDict_SetItemString(kwargs, it->first.c_str(), PyUnicode_FromString(it->second.c_str()));
+        if(isFloat(it->second)) {
+            PyObject *float_str = PyUnicode_FromString(it->second.c_str());
+            PyDict_SetItemString(kwargs, it->first.c_str(), PyFloat_FromString(float_str));
+        } else {
+            PyDict_SetItemString(kwargs, it->first.c_str(), PyUnicode_FromString(it->second.c_str()));
+        }
     }
 
     PyObject* res = PyObject_Call(
@@ -1656,7 +1670,13 @@ bool quiver(const NumericX* x, const NumericY* y, const NumericZ* z, const Numer
   PyObject* kwargs = PyDict_New();
   for(std::map<std::string, std::string>::const_iterator it = keywords.begin(); it != keywords.end(); ++it)
   {
+    if(isFloat(it->second)) {
+      PyObject *float_str = PyUnicode_FromString(it->second.c_str());
+      PyDict_SetItemString(kwargs, it->first.c_str(), PyFloat_FromString(float_str));
+    }
+    else {
       PyDict_SetItemString(kwargs, it->first.c_str(), PyUnicode_FromString(it->second.c_str()));
+    }
   }
     
   //get figure gca to enable 3d projection
