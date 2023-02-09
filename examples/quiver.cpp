@@ -33,8 +33,10 @@ int main() {
         }
     }
 
-    std::map<std::string, std::string> kwargs = {{"normalize", "True"}, {"length", "0.3"}};
-    plt::quiver(x, y, z, u, v, w, n0, n1, n2, kwargs);
+    std::map<std::string, std::string> subplot_kwargs = {{"projection", "3d"}};
+    plt::subplot(1, 1, 1, subplot_kwargs);
+    std::map<std::string, std::string> quiver_kwargs = {{"normalize", "True"}, {"length", "0.3"}};
+    plt::quiver(x, y, z, u, v, w, n0, n1, n2, quiver_kwargs);
     plt::show();
 
     delete[] x;
