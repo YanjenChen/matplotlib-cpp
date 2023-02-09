@@ -503,6 +503,14 @@ PyObject* get_listlist(const std::vector<std::vector<Numeric>>& ll) {
 
 }  // namespace detail
 
+bool isDouble(std::string s) {
+    std::istringstream iss(s);
+    double f;
+    iss >> std::noskipws >> f;  // noskipws considers leading whitespace invalid
+    // Check the entire string was consumed and if either failbit or badbit is set
+    return iss.eof() && !iss.fail();
+}
+
 /// Plot a line through the given x and y data points..
 ///
 /// See: https://matplotlib.org/3.2.1/api/_as_gen/matplotlib.pyplot.plot.html
@@ -1057,7 +1065,6 @@ void imshow(const cv::Mat& image, const std::map<std::string, std::string>& keyw
 
 template <typename NumericX, typename NumericY>
 bool scatter(const std::vector<NumericX>& x, const std::vector<NumericY>& y,
-             const double s = 1.0,  // The marker size in points**2
              const std::map<std::string, std::string>& keywords = {}) {
     detail::_interpreter::get();
 
@@ -1066,10 +1073,19 @@ bool scatter(const std::vector<NumericX>& x, const std::vector<NumericY>& y,
     PyObject* xarray = detail::get_array(x);
     PyObject* yarray = detail::get_array(y);
 
+    // construct keyword args
     PyObject* kwargs = PyDict_New();
-    PyDict_SetItemString(kwargs, "s", PyLong_FromLong(s));
-    for (const auto& it : keywords) {
-        PyDict_SetItemString(kwargs, it.first.c_str(), PyString_FromString(it.second.c_str()));
+    for (std::map<std::string, std::string>::const_iterator it = keywords.begin();
+         it != keywords.end(); ++it) {
+        PyObject* pobj_second;
+        if (isDouble(it->second)) {
+            pobj_second = PyFloat_FromDouble(std::stod(it->second));
+            PyDict_SetItemString(kwargs, it->first.c_str(), pobj_second);
+        } else {
+            pobj_second = PyUnicode_FromString(it->second.c_str());
+            PyDict_SetItemString(kwargs, it->first.c_str(), pobj_second);
+        }
+        Py_DECREF(pobj_second);
     }
 
     PyObject* plot_args = PyTuple_New(2);
@@ -1124,8 +1140,7 @@ bool scatter_colored(const std::vector<NumericX>& x, const std::vector<NumericY>
 template <typename NumericX, typename NumericY, typename NumericZ>
 bool scatter(const std::vector<NumericX>& x, const std::vector<NumericY>& y,
              const std::vector<NumericZ>& z,
-             const double s = 1.0,  // The marker size in points**2
-             const std::map<std::string, std::string>& keywords = {}, const long fig_number = 0) {
+             const std::map<std::string, std::string>& keywords = {}) {
     detail::_interpreter::get();
 
     // Same as with plot_surface: We lazily load the modules here the first time
@@ -1168,41 +1183,25 @@ bool scatter(const std::vector<NumericX>& x, const std::vector<NumericY>& y,
     PyTuple_SetItem(args, 1, yarray);
     PyTuple_SetItem(args, 2, zarray);
 
-    // Build up the kw args.
+    // construct keyword args
     PyObject* kwargs = PyDict_New();
-
     for (std::map<std::string, std::string>::const_iterator it = keywords.begin();
          it != keywords.end(); ++it) {
-        PyDict_SetItemString(kwargs, it->first.c_str(), PyString_FromString(it->second.c_str()));
+        PyObject* pobj_second;
+        if (isDouble(it->second)) {
+            pobj_second = PyFloat_FromDouble(std::stod(it->second));
+            PyDict_SetItemString(kwargs, it->first.c_str(), pobj_second);
+        } else {
+            pobj_second = PyUnicode_FromString(it->second.c_str());
+            PyDict_SetItemString(kwargs, it->first.c_str(), pobj_second);
+        }
+        Py_DECREF(pobj_second);
     }
-    PyObject* fig_args = PyTuple_New(1);
-    PyObject* fig = nullptr;
-    PyTuple_SetItem(fig_args, 0, PyLong_FromLong(fig_number));
-    PyObject* fig_exists =
-        PyObject_CallObject(detail::_interpreter::get().s_python_function_fignum_exists, fig_args);
-    if (!PyObject_IsTrue(fig_exists)) {
-        fig = PyObject_CallObject(detail::_interpreter::get().s_python_function_figure,
-                                  detail::_interpreter::get().s_python_empty_tuple);
-    } else {
-        fig = PyObject_CallObject(detail::_interpreter::get().s_python_function_figure, fig_args);
-    }
-    Py_DECREF(fig_exists);
-    if (!fig) throw std::runtime_error("Call to figure() failed.");
 
-    PyObject* gca_kwargs = PyDict_New();
-    PyDict_SetItemString(gca_kwargs, "projection", PyString_FromString("3d"));
-
-    PyObject* gca = PyObject_GetAttrString(fig, "gca");
-    if (!gca) throw std::runtime_error("No gca");
-    Py_INCREF(gca);
-    PyObject* axis =
-        PyObject_Call(gca, detail::_interpreter::get().s_python_empty_tuple, gca_kwargs);
-
+    PyObject* axis = PyObject_CallObject(detail::_interpreter::get().s_python_function_gca,
+                                         detail::_interpreter::get().s_python_empty_tuple);
     if (!axis) throw std::runtime_error("No axis");
     Py_INCREF(axis);
-
-    Py_DECREF(gca);
-    Py_DECREF(gca_kwargs);
 
     PyObject* plot3 = PyObject_GetAttrString(axis, "scatter");
     if (!plot3) throw std::runtime_error("No 3D line plot");
@@ -1214,7 +1213,6 @@ bool scatter(const std::vector<NumericX>& x, const std::vector<NumericY>& y,
     Py_DECREF(axis);
     Py_DECREF(args);
     Py_DECREF(kwargs);
-    Py_DECREF(fig);
     if (res) Py_DECREF(res);
     return res;
 }
@@ -1463,14 +1461,6 @@ bool contour(const std::vector<NumericX>& x, const std::vector<NumericY>& y,
     return res;
 }
 
-bool isFloat(std::string s) {
-    std::istringstream iss(s);
-    float f;
-    iss >> std::noskipws >> f;  // noskipws considers leading whitespace invalid
-    // Check the entire string was consumed and if either failbit or badbit is set
-    return iss.eof() && !iss.fail();
-}
-
 template <typename NumericX, typename NumericY, typename NumericU, typename NumericW>
 bool quiver(const std::vector<NumericX>& x, const std::vector<NumericY>& y,
             const std::vector<NumericU>& u, const std::vector<NumericW>& w,
@@ -1528,13 +1518,15 @@ bool quiver(const NumericX* x, const NumericY* y, const NumericU* u, const Numer
     PyObject* kwargs = PyDict_New();
     for (std::map<std::string, std::string>::const_iterator it = keywords.begin();
          it != keywords.end(); ++it) {
-        if (isFloat(it->second)) {
-            PyObject* float_str = PyUnicode_FromString(it->second.c_str());
-            PyDict_SetItemString(kwargs, it->first.c_str(), PyFloat_FromString(float_str));
+        PyObject* pobj_second;
+        if (isDouble(it->second)) {
+            pobj_second = PyFloat_FromDouble(std::stod(it->second));
+            PyDict_SetItemString(kwargs, it->first.c_str(), pobj_second);
         } else {
-            PyDict_SetItemString(kwargs, it->first.c_str(),
-                                 PyUnicode_FromString(it->second.c_str()));
+            pobj_second = PyUnicode_FromString(it->second.c_str());
+            PyDict_SetItemString(kwargs, it->first.c_str(), pobj_second);
         }
+        Py_DECREF(pobj_second);
     }
 
     PyObject* res =
@@ -1691,33 +1683,22 @@ bool quiver(const NumericX* x, const NumericY* y, const NumericZ* z, const Numer
     PyObject* kwargs = PyDict_New();
     for (std::map<std::string, std::string>::const_iterator it = keywords.begin();
          it != keywords.end(); ++it) {
-        if (isFloat(it->second)) {
-            PyObject* float_str = PyUnicode_FromString(it->second.c_str());
-            PyDict_SetItemString(kwargs, it->first.c_str(), PyFloat_FromString(float_str));
+        PyObject* pobj_second;
+        if (isDouble(it->second)) {
+            pobj_second = PyFloat_FromDouble(std::stod(it->second));
+            PyDict_SetItemString(kwargs, it->first.c_str(), pobj_second);
         } else {
-            PyDict_SetItemString(kwargs, it->first.c_str(),
-                                 PyUnicode_FromString(it->second.c_str()));
+            pobj_second = PyUnicode_FromString(it->second.c_str());
+            PyDict_SetItemString(kwargs, it->first.c_str(), pobj_second);
         }
+        Py_DECREF(pobj_second);
     }
 
     // get figure gca to enable 3d projection
-    PyObject* fig = PyObject_CallObject(detail::_interpreter::get().s_python_function_figure,
-                                        detail::_interpreter::get().s_python_empty_tuple);
-    if (!fig) throw std::runtime_error("Call to figure() failed.");
-
-    PyObject* gca_kwargs = PyDict_New();
-    PyDict_SetItemString(gca_kwargs, "projection", PyString_FromString("3d"));
-
-    PyObject* gca = PyObject_GetAttrString(fig, "add_subplot");
-    if (!gca) throw std::runtime_error("No gca");
-    Py_INCREF(gca);
-    PyObject* axis =
-        PyObject_Call(gca, detail::_interpreter::get().s_python_empty_tuple, gca_kwargs);
-
+    PyObject* axis = PyObject_CallObject(detail::_interpreter::get().s_python_function_gca,
+                                         detail::_interpreter::get().s_python_empty_tuple);
     if (!axis) throw std::runtime_error("No axis");
     Py_INCREF(axis);
-    Py_DECREF(gca);
-    Py_DECREF(gca_kwargs);
 
     // plot our boys bravely, plot them strongly, plot them with a wink and clap
     PyObject* plot3 = PyObject_GetAttrString(axis, "quiver");
@@ -2442,21 +2423,38 @@ inline void tick_params(const std::map<std::string, std::string>& keywords,
     Py_DECREF(res);
 }
 
-inline void subplot(long nrows, long ncols, long plot_number) {
+inline void subplot(long nrows, long ncols, long plot_number,
+                    const std::map<std::string, std::string>& keywords = {}) {
     detail::_interpreter::get();
 
     // construct positional args
     PyObject* args = PyTuple_New(3);
-    PyTuple_SetItem(args, 0, PyFloat_FromDouble(nrows));
-    PyTuple_SetItem(args, 1, PyFloat_FromDouble(ncols));
-    PyTuple_SetItem(args, 2, PyFloat_FromDouble(plot_number));
+    PyTuple_SetItem(args, 0, PyLong_FromLong(nrows));
+    PyTuple_SetItem(args, 1, PyLong_FromLong(ncols));
+    PyTuple_SetItem(args, 2, PyLong_FromLong(plot_number));
+
+    // construct keyword args
+    PyObject* kwargs = PyDict_New();
+    for (std::map<std::string, std::string>::const_iterator it = keywords.begin();
+         it != keywords.end(); ++it) {
+        PyObject* pobj_second;
+        if (isDouble(it->second)) {
+            pobj_second = PyFloat_FromDouble(std::stod(it->second));
+            PyDict_SetItemString(kwargs, it->first.c_str(), pobj_second);
+        } else {
+            pobj_second = PyUnicode_FromString(it->second.c_str());
+            PyDict_SetItemString(kwargs, it->first.c_str(), pobj_second);
+        }
+        Py_DECREF(pobj_second);
+    }
 
     PyObject* res =
-        PyObject_CallObject(detail::_interpreter::get().s_python_function_subplot, args);
+        PyObject_Call(detail::_interpreter::get().s_python_function_subplot, args, kwargs);
     if (!res) throw std::runtime_error("Call to subplot() failed.");
 
     Py_DECREF(args);
     Py_DECREF(res);
+    Py_DECREF(kwargs);
 }
 
 inline void subplot2grid(long nrows, long ncols, long rowid = 0, long colid = 0, long rowspan = 1,
