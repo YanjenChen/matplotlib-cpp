@@ -2105,21 +2105,27 @@ inline bool fignum_exists(long number) {
     return ret;
 }
 
-inline void figure_size(size_t w, size_t h) {
+inline void figure_size(long number, double w, double h) {
     detail::_interpreter::get();
 
-    const size_t dpi = 100;
+    assert(number > 0);
+    // Make sure interpreter is initialised
+    detail::_interpreter::get();
+
+    PyObject* args = PyTuple_New(1);
+    PyTuple_SetItem(args, 0, PyLong_FromLong(number));
+
     PyObject* size = PyTuple_New(2);
-    PyTuple_SetItem(size, 0, PyFloat_FromDouble((double)w / dpi));
-    PyTuple_SetItem(size, 1, PyFloat_FromDouble((double)h / dpi));
+    PyTuple_SetItem(size, 0, PyFloat_FromDouble(w));
+    PyTuple_SetItem(size, 1, PyFloat_FromDouble(h));
 
     PyObject* kwargs = PyDict_New();
     PyDict_SetItemString(kwargs, "figsize", size);
-    PyDict_SetItemString(kwargs, "dpi", PyLong_FromSize_t(dpi));
 
-    PyObject* res = PyObject_Call(detail::_interpreter::get().s_python_function_figure,
-                                  detail::_interpreter::get().s_python_empty_tuple, kwargs);
-
+    PyObject* res =
+        PyObject_Call(detail::_interpreter::get().s_python_function_figure, args, kwargs);
+    Py_DECREF(args);
+    Py_DECREF(size);
     Py_DECREF(kwargs);
 
     if (!res) throw std::runtime_error("Call to figure_size() failed.");
