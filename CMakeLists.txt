@@ -41,9 +41,9 @@ add_executable(minimal examples/minimal.cpp)
 target_link_libraries(minimal PRIVATE matplotlib_cpp)
 set_target_properties(minimal PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
 
-add_executable(basic examples/basic.cpp)
-target_link_libraries(basic PRIVATE matplotlib_cpp)
-set_target_properties(basic PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
+# add_executable(basic examples/basic.cpp)
+# target_link_libraries(basic PRIVATE matplotlib_cpp)
+# set_target_properties(basic PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/bin")
 
 add_executable(modern examples/modern.cpp)
 target_link_libraries(modern PRIVATE matplotlib_cpp)
