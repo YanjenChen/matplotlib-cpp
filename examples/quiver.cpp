@@ -37,6 +37,8 @@ int main() {
     plt::subplot(1, 1, 1, subplot_kwargs);
     std::map<std::string, std::string> quiver_kwargs = {{"normalize", "True"}, {"length", "0.3"}};
     plt::quiver(x, y, z, u, v, w, n0, n1, n2, quiver_kwargs);
+    std::map<std::string, std::string> rect_kwargs = {{"angle", "30"}, {"fill", "0"}, {"rotation_point", "center"}};
+    plt::rectangle3d(0, 0, 1, 2, 3, rect_kwargs);
     plt::show();
 
     delete[] x;

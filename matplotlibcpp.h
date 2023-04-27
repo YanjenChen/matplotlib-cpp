@@ -1715,6 +1715,122 @@ bool quiver(const NumericX* x, const NumericY* y, const NumericZ* z, const Numer
     return res;
 }
 
+bool rectangle3d(const double& x, const double& y, const double& z, const double& width,
+                 const double& height, const std::map<std::string, std::string>& keywords = {}) {
+    // set up 3d axes stuff
+    static PyObject *mpl_toolkitsmod = nullptr, *art3dmod = nullptr, *patchesmod = nullptr;
+    if (!mpl_toolkitsmod) {
+        detail::_interpreter::get();
+
+        PyObject* mpl_toolkits = PyString_FromString("mpl_toolkits");
+        PyObject* art3d = PyString_FromString("mpl_toolkits.mplot3d.art3d");
+        if (!mpl_toolkits || !art3d) {
+            throw std::runtime_error("couldnt create string");
+        }
+
+        mpl_toolkitsmod = PyImport_Import(mpl_toolkits);
+        Py_DECREF(mpl_toolkits);
+        if (!mpl_toolkitsmod) {
+            throw std::runtime_error("Error loading module mpl_toolkits!");
+        }
+
+        art3dmod = PyImport_Import(art3d);
+        Py_DECREF(art3d);
+        if (!art3dmod) {
+            throw std::runtime_error("Error loading module mpl_toolkits.mplot3d.art3d!");
+        }
+    }
+
+    // set up patches
+    if (!patchesmod) {
+        PyObject* patches = PyString_FromString("matplotlib.patches");
+        if (!patches) {
+            throw std::runtime_error("couldnt create string");
+        }
+
+        patchesmod = PyImport_Import(patches);
+        Py_DECREF(patches);
+        if (!patchesmod) {
+            throw std::runtime_error("Error loading module matplotlib.patches!");
+        }
+    }
+
+    // construct plot_args for rectangle
+    PyObject* xy = PyTuple_New(2);
+    PyTuple_SetItem(xy, 0, PyFloat_FromDouble(x));
+    PyTuple_SetItem(xy, 1, PyFloat_FromDouble(y));
+    PyObject* rect_plot_args = PyTuple_New(3);
+    PyTuple_SetItem(rect_plot_args, 0, xy);
+    PyTuple_SetItem(rect_plot_args, 1, PyFloat_FromDouble(width));
+    PyTuple_SetItem(rect_plot_args, 2, PyFloat_FromDouble(height));
+
+    // construct keyword args for rectangle
+    PyObject* rect_kwargs = PyDict_New();
+    for (std::map<std::string, std::string>::const_iterator it = keywords.begin();
+         it != keywords.end(); ++it) {
+        PyObject* pobj_second;
+        if (isDouble(it->second)) {
+            pobj_second = PyFloat_FromDouble(std::stod(it->second));
+            PyDict_SetItemString(rect_kwargs, it->first.c_str(), pobj_second);
+        } else {
+            pobj_second = PyUnicode_FromString(it->second.c_str());
+            PyDict_SetItemString(rect_kwargs, it->first.c_str(), pobj_second);
+        }
+        Py_DECREF(pobj_second);
+    }
+
+    // create rectangle
+    PyObject* rectangle_func = PyObject_GetAttrString(patchesmod, "Rectangle");
+    if (!rectangle_func) throw std::runtime_error("No Rectangle");
+    Py_INCREF(rectangle_func);
+    PyObject* rect = PyObject_Call(rectangle_func, rect_plot_args, rect_kwargs);
+    if (!rect) throw std::runtime_error("Failed creating rectangle");
+    Py_DECREF(rectangle_func);
+    Py_DECREF(rect_kwargs);
+    Py_DECREF(rect_plot_args);
+
+    // construct plot_args for pathpatch_2d_to_3d
+    PyObject* path_plot_args = PyTuple_New(1);
+    PyTuple_SetItem(path_plot_args, 0, rect);
+
+    // add patch
+    PyObject* axis = PyObject_CallObject(detail::_interpreter::get().s_python_function_gca,
+                                         detail::_interpreter::get().s_python_empty_tuple);
+    if (!axis) throw std::runtime_error("No axis");
+    Py_INCREF(axis);
+    PyObject* add_patch_func = PyObject_GetAttrString(axis, "add_patch");
+    if (!add_patch_func) throw std::runtime_error("No add_patch");
+    Py_INCREF(add_patch_func);
+    PyObject* res = PyObject_CallObject(add_patch_func, path_plot_args);
+    if (!res) throw std::runtime_error("Failed add_patch");
+    Py_DECREF(add_patch_func);
+    Py_DECREF(axis);
+    if (res) Py_DECREF(res);
+
+    // construct keyword args for pathpatch_2d_to_3d
+    PyObject* path_kwargs = PyDict_New();
+    PyObject* pobj_second;
+    pobj_second = PyFloat_FromDouble(z);
+    PyDict_SetItemString(path_kwargs, "z", pobj_second);
+    Py_DECREF(pobj_second);
+    pobj_second = PyUnicode_FromString("z");
+    PyDict_SetItemString(path_kwargs, "zdir", pobj_second);
+    Py_DECREF(pobj_second);
+
+    // convert patch from 2d to 3d
+    PyObject* path_2d_to_3d_func = PyObject_GetAttrString(art3dmod, "pathpatch_2d_to_3d");
+    if (!path_2d_to_3d_func) throw std::runtime_error("No pathpatch_2d_to_3d");
+    Py_INCREF(path_2d_to_3d_func);
+    res = PyObject_Call(path_2d_to_3d_func, path_plot_args, path_kwargs);
+    if (!res) throw std::runtime_error("Failed to execute pathpatch_2d_to_3d");
+    Py_DECREF(path_2d_to_3d_func);
+    Py_DECREF(path_plot_args);
+    Py_DECREF(path_kwargs);
+    if (res) Py_DECREF(res);
+
+    return res;
+}
+
 template <typename NumericX, typename NumericY>
 bool stem(const std::vector<NumericX>& x, const std::vector<NumericY>& y,
           const std::string& s = "") {
