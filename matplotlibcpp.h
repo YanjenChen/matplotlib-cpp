@@ -2364,6 +2364,36 @@ void xlim(Numeric left, Numeric right) {
     Py_DECREF(res);
 }
 
+template <typename Numeric>
+void zlim(Numeric left, Numeric right) {
+    detail::_interpreter::get();
+
+    PyObject* list = PyList_New(2);
+    PyList_SetItem(list, 0, PyFloat_FromDouble(left));
+    PyList_SetItem(list, 1, PyFloat_FromDouble(right));
+
+    PyObject* args = PyTuple_New(1);
+    PyTuple_SetItem(args, 0, list);
+
+    // Get axis from python
+    PyObject* ax = PyObject_CallObject(detail::_interpreter::get().s_python_function_gca,
+                                       detail::_interpreter::get().s_python_empty_tuple);
+    if (!ax) throw std::runtime_error("No axis");
+    Py_INCREF(ax);
+    // Get zlim function from axis
+    PyObject* set_zlim = PyObject_GetAttrString(ax, "set_zlim");
+    if (!set_zlim) throw std::runtime_error("No set_zlim");
+    Py_INCREF(set_zlim);
+    // call set_zlim
+    PyObject* res = PyObject_CallObject(set_zlim, args);
+    if (!res) throw std::runtime_error("Call to set_zlim() failed.");
+    Py_DECREF(set_zlim);
+    Py_DECREF(ax);
+
+    Py_DECREF(args);
+    Py_DECREF(res);
+}
+
 inline std::array<double, 2> xlim() {
     PyObject* args = PyTuple_New(0);
     PyObject* res = PyObject_CallObject(detail::_interpreter::get().s_python_function_xlim, args);
