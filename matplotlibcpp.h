@@ -1715,6 +1715,78 @@ bool quiver(const NumericX* x, const NumericY* y, const NumericZ* z, const Numer
     return res;
 }
 
+bool rectangle2d(const double& x, const double& y, const double& width, const double& height,
+                 const std::map<std::string, std::string>& keywords = {}) {
+    // set up patches
+    static PyObject* patchesmod = nullptr;
+    if (!patchesmod) {
+        PyObject* patches = PyString_FromString("matplotlib.patches");
+        if (!patches) {
+            throw std::runtime_error("couldnt create string");
+        }
+
+        patchesmod = PyImport_Import(patches);
+        Py_DECREF(patches);
+        if (!patchesmod) {
+            throw std::runtime_error("Error loading module matplotlib.patches!");
+        }
+    }
+
+    // construct plot_args for rectangle
+    PyObject* xy = PyTuple_New(2);
+    PyTuple_SetItem(xy, 0, PyFloat_FromDouble(x));
+    PyTuple_SetItem(xy, 1, PyFloat_FromDouble(y));
+    PyObject* rect_plot_args = PyTuple_New(3);
+    PyTuple_SetItem(rect_plot_args, 0, xy);
+    PyTuple_SetItem(rect_plot_args, 1, PyFloat_FromDouble(width));
+    PyTuple_SetItem(rect_plot_args, 2, PyFloat_FromDouble(height));
+
+    // construct keyword args for rectangle
+    PyObject* rect_kwargs = PyDict_New();
+    for (std::map<std::string, std::string>::const_iterator it = keywords.begin();
+         it != keywords.end(); ++it) {
+        PyObject* pobj_second;
+        if (isDouble(it->second)) {
+            pobj_second = PyFloat_FromDouble(std::stod(it->second));
+            PyDict_SetItemString(rect_kwargs, it->first.c_str(), pobj_second);
+        } else {
+            pobj_second = PyUnicode_FromString(it->second.c_str());
+            PyDict_SetItemString(rect_kwargs, it->first.c_str(), pobj_second);
+        }
+        Py_DECREF(pobj_second);
+    }
+
+    // create rectangle
+    PyObject* rectangle_func = PyObject_GetAttrString(patchesmod, "Rectangle");
+    if (!rectangle_func) throw std::runtime_error("No Rectangle");
+    Py_INCREF(rectangle_func);
+    PyObject* rect = PyObject_Call(rectangle_func, rect_plot_args, rect_kwargs);
+    if (!rect) throw std::runtime_error("Failed creating rectangle");
+    Py_DECREF(rectangle_func);
+    Py_DECREF(rect_kwargs);
+    Py_DECREF(rect_plot_args);
+
+    // construct plot_args
+    PyObject* path_plot_args = PyTuple_New(1);
+    PyTuple_SetItem(path_plot_args, 0, rect);
+
+    // add patch
+    PyObject* axis = PyObject_CallObject(detail::_interpreter::get().s_python_function_gca,
+                                         detail::_interpreter::get().s_python_empty_tuple);
+    if (!axis) throw std::runtime_error("No axis");
+    Py_INCREF(axis);
+    PyObject* add_patch_func = PyObject_GetAttrString(axis, "add_patch");
+    if (!add_patch_func) throw std::runtime_error("No add_patch");
+    Py_INCREF(add_patch_func);
+    PyObject* res = PyObject_CallObject(add_patch_func, path_plot_args);
+    if (!res) throw std::runtime_error("Failed add_patch");
+    Py_DECREF(add_patch_func);
+    Py_DECREF(axis);
+    if (res) Py_DECREF(res);
+
+    return res;
+}
+
 bool rectangle3d(const double& x, const double& y, const double& z, const double& width,
                  const double& height, const std::map<std::string, std::string>& keywords = {}) {
     // set up 3d axes stuff
